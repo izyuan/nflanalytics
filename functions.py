@@ -4,6 +4,9 @@ import numpy as np
 
 # creating a function to calculate the win/loss ratio for each team given the seasonal data
 def win_loss (schedule_df): 
+    """
+    This function calculates the win/loss ratio for each team in the schedule dataframe
+    """
     # making the dataframe smaller so its easier to handle the data
     smallSchedule2024 = schedule_df[['result', 'away_team', 'away_score', 'home_team', 'home_score', 'week']]   
     previousGames = smallSchedule2024[schedule_df['result'].notnull()]
@@ -44,6 +47,9 @@ def win_loss (schedule_df):
 
 # getting fantasy defense ranking through week by week data
 def fantasy_defense_rankings(week_by_week_df): 
+    """
+    This function calculates the fantasy defense rankings for each team based on the fantasy points scored against them
+    """
     smallFantasy_df = week_by_week_df[['fantasy_points_ppr', 'position', 'opponent_team', 'player_name', 'week']]
     releventPositions_df = smallFantasy_df[smallFantasy_df['position'].isin(['QB', 'RB', 'WR', 'TE'])]
     
@@ -59,4 +65,26 @@ def fantasy_defense_rankings(week_by_week_df):
     
     defensePointsAgainst = defensePointsAgainst.sort_values(by=['position', 'rank'])
     
-    return defensePointsAgainst
+    defenseRankings = defensePointsAgainst.pivot(index = "opponent_team", columns = "position", values = "rank")
+    
+    defensePPRPoints = defensePointsAgainst.pivot(index = "opponent_team", columns = "position", values = "fantasy_points_ppr")
+    
+    defenseRankings = defenseRankings.reset_index()
+    defensePPRPoints = defensePPRPoints.reset_index()
+    
+    defenseRankings = defenseRankings.merge(defensePPRPoints, on = "opponent_team", suffixes = ("_rank", "_ppr_avg"))
+
+    
+    return defenseRankings
+
+
+def merge_defense_schedule (schedule_df, defense_df): 
+    """
+    Merges the defense rankings with the schedule dataframe
+    """
+    # merging the defense rankings with the schedule dataframe
+    home_df = defense_df.add_suffix("_home")
+    scheduleWithDefense = schedule_df.merge(home_df, left_on="home_team", right_on="opponent_team_home", how="left", suffixes=("", "_home"))
+    scheduleWithDefense = scheduleWithDefense.merge(defense_df, left_on="away_team", right_on="opponent_team", how="left", suffixes=("", "_away"))
+    scheduleWithDefense = scheduleWithDefense.drop(columns=["opponent_team_home", "opponent_team_away"], errors="ignore")
+    return scheduleWithDefense
