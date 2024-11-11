@@ -40,3 +40,23 @@ def win_loss (schedule_df):
         schedule_df.loc[mask, 'away_team_loss_record'] = schedule_df['away_team'].map(teamLosses)
 
     return schedule_df
+
+
+# getting fantasy defense ranking through week by week data
+def fantasy_defense_rankings(week_by_week_df): 
+    smallFantasy_df = week_by_week_df[['fantasy_points_ppr', 'position', 'opponent_team', 'player_name', 'week']]
+    releventPositions_df = smallFantasy_df[smallFantasy_df['position'].isin(['QB', 'RB', 'WR', 'TE'])]
+    
+    # using top performers b/c thats usually more indicative of sos in fantasy football 
+    topPerformers_df = releventPositions_df.sort_values(by='fantasy_points_ppr', ascending=False).groupby(['opponent_team', 'position']).head(10) # can use .head() if i want to see top performer averages
+    
+    
+    # groupy by opponent team and position in order to find out how many total fantasy points each position has scored against them 
+    defensePointsAgainst = topPerformers_df.groupby(['opponent_team', 'position'])['fantasy_points_ppr'].mean().reset_index()
+    
+    # assign a rank to each team based on the total fantasy points scored against them
+    defensePointsAgainst['rank'] = defensePointsAgainst.groupby('position')['fantasy_points_ppr'].rank(ascending=True)
+    
+    defensePointsAgainst = defensePointsAgainst.sort_values(by=['position', 'rank'])
+    
+    return defensePointsAgainst
