@@ -88,3 +88,24 @@ def merge_defense_schedule (schedule_df, defense_df):
     scheduleWithDefense = scheduleWithDefense.merge(defense_df, left_on="away_team", right_on="opponent_team", how="left", suffixes=("", "_away"))
     scheduleWithDefense = scheduleWithDefense.drop(columns=["opponent_team_home", "opponent_team_away"], errors="ignore")
     return scheduleWithDefense
+
+def get_team_schedule (schedule_df,team_name): 
+    # filter rows where the team is either the home or away team
+    team_home_games = schedule_df[schedule_df['home_team'] == team_name]
+    team_away_games = schedule_df[schedule_df['away_team'] == team_name]
+
+    # create lists of matchups
+    home_games = [row['away_team'] for _, row in team_home_games.iterrows()]
+    away_games = [row['home_team'] for _, row in team_away_games.iterrows()]
+
+    # Combine the lists and sort by the 'week' column
+    full_schedule = (
+        team_home_games[['week']].assign(matchup=home_games)
+        .append(team_away_games[['week']].assign(matchup=away_games))
+        .sort_values(by='week')
+        .reset_index(drop=True)
+    )
+
+    # Extract the list of matchups
+    schedule_list = full_schedule['matchup'].tolist()
+    return schedule_list
