@@ -89,7 +89,7 @@ def merge_defense_schedule (schedule_df, defense_df):
     scheduleWithDefense = scheduleWithDefense.drop(columns=["opponent_team_home", "opponent_team_away"], errors="ignore")
     return scheduleWithDefense
 
-def get_team_schedule (schedule_df,team_name): 
+def get_team_schedule (schedule_df,team_name, start_week = 1 , end_week = 18): 
     # filter rows where the team is either the home or away team
     team_home_games = schedule_df[schedule_df['home_team'] == team_name]
     team_away_games = schedule_df[schedule_df['away_team'] == team_name]
@@ -98,6 +98,7 @@ def get_team_schedule (schedule_df,team_name):
     home_games = [row['away_team'] for _, row in team_home_games.iterrows()]
     away_games = [row['home_team'] for _, row in team_away_games.iterrows()]
 
+    
     # Combine the lists and sort by the 'week' column
     full_schedule = (
         team_home_games[['week']].assign(matchup=home_games)
@@ -106,6 +107,22 @@ def get_team_schedule (schedule_df,team_name):
         .reset_index(drop=True)
     )
 
-    # Extract the list of matchups
+    # identify bye weeks (weeks where the team is not playing)
+    all_weeks = set(range(1, 18))
+    played_weeks = set(full_schedule['week'])
+    bye_weeks = list(all_weeks - played_weeks)
+
+    # add bye weeks to the schedule
+    for bye_week in bye_weeks:
+        full_schedule = pd.concat([
+            full_schedule,
+            pd.DataFrame({"week": [bye_week], "matchup": ["BYE"]})
+        ], ignore_index=True)
+
+    full_schedule = full_schedule.sort_values(by='week').reset_index(drop=True)
     schedule_list = full_schedule['matchup'].tolist()
-    return schedule_list
+
+    # account for a specific range of weeks
+    sorted_schedule_list = schedule_list[(start_week - 1):(end_week)]
+
+    return sorted_schedule_list
