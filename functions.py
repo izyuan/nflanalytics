@@ -222,7 +222,7 @@ def calculate_top_player_matchup(schedule_df, week_by_week_df, start_week=1, end
     
     return top10_qb_matchups, top30_rb_matchups, top30_wr_matchups, top12_te_matchups
     
-def plot_fantasy_vs_matchup(data_df, position, playoffs= True):
+def plot_fantasy_vs_matchup(data_df, position, playoffs= True, filepath = "fantasy_vs_matchup.png"):
     plt.figure(figsize=(12, 8))
 
     # create the scatter plot
@@ -271,4 +271,5 @@ def plot_fantasy_vs_matchup(data_df, position, playoffs= True):
     else:
         plt.title(f"Fantasy Points vs. Average Opponent Matchup Rank (Rest of Season) for Top {position}s")
     plt.grid()
+    plt.savefig(filepath)
     plt.show()
