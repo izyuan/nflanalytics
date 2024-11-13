@@ -171,7 +171,7 @@ def calculate_top_player_matchup(schedule_df, week_by_week_df, start_week=1, end
     
     for team in listOfTeams:
         team_matchups = get_team_schedule(schedule_df, team, start_week, end_week)
-
+        
         # precompute opponent ranks for each position using dictionary lookups
         qb_opponent_ranks = [defenseRankings_df.at[opponent, "QB_rank"] if opponent in defenseRankings_df.index else np.nan for opponent in team_matchups]
         rb_opponent_ranks = [defenseRankings_df.at[opponent, "RB_rank"] if opponent in defenseRankings_df.index else np.nan for opponent in team_matchups]
@@ -196,13 +196,21 @@ def calculate_top_player_matchup(schedule_df, week_by_week_df, start_week=1, end
 
     matchups_df = pd.DataFrame(matchups_data)
          
-    # get multiple dfs of all the positions
+    #trying to filter out the injured players
+    latest_week = week_by_week_df["week"].max()
+    recent_games_df = week_by_week_df[
+    week_by_week_df["week"].isin([latest_week - 2, latest_week - 1, latest_week])
+]
+    active_players = recent_games_df["player_name"].unique().tolist()
+    active_players.append("N.Collins")
+
     fantasyAverage_df = (
     week_by_week_df.groupby(["player_name", "position", "recent_team"])
     .agg({"fantasy_points_ppr": "mean"})
     .reset_index()
     .sort_values("fantasy_points_ppr", ascending=False)
 )
+    fantasyAverage_df = fantasyAverage_df[fantasyAverage_df["player_name"].isin(active_players)]
     # getting the top 30 fantasy performers of each of three positions 
     top10_qb = fantasyAverage_df[fantasyAverage_df["position"] == "QB"].head(10)
     top30_rb = fantasyAverage_df[fantasyAverage_df["position"] == "RB"].head(30)
@@ -271,5 +279,5 @@ def plot_fantasy_vs_matchup(data_df, position, playoffs= True, filepath = "fanta
     else:
         plt.title(f"Fantasy Points vs. Average Opponent Matchup Rank (Rest of Season) for Top {position}s")
     plt.grid()
-    plt.savefig(filepath)
+    plt.savefig(f"visuals/{filepath}")
     plt.show()
