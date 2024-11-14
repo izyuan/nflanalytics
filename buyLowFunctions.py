@@ -205,17 +205,17 @@ def calculate_top_player_matchup(schedule_df, week_by_week_df, start_week=1, end
     active_players.append("N.Collins")
 
     fantasyAverage_df = (
-    week_by_week_df.groupby(["player_name", "position", "recent_team"])
-    .agg({"fantasy_points_ppr": "mean"})
+    week_by_week_df.groupby(["player_name", "position"])
+    .agg({"fantasy_points_ppr": "mean", "recent_team": "last"})
     .reset_index()
     .sort_values("fantasy_points_ppr", ascending=False)
 )
     fantasyAverage_df = fantasyAverage_df[fantasyAverage_df["player_name"].isin(active_players)]
     # getting the top 30 fantasy performers of each of three positions 
-    top10_qb = fantasyAverage_df[fantasyAverage_df["position"] == "QB"].head(10)
-    top30_rb = fantasyAverage_df[fantasyAverage_df["position"] == "RB"].head(30)
-    top30_wr = fantasyAverage_df[fantasyAverage_df["position"] == "WR"].head(30)
-    top12_te = fantasyAverage_df[fantasyAverage_df["position"] == "TE"].head(12)
+    top10_qb = fantasyAverage_df[fantasyAverage_df["position"] == "QB"].head(15)
+    top30_rb = fantasyAverage_df[fantasyAverage_df["position"] == "RB"].head(35)
+    top30_wr = fantasyAverage_df[fantasyAverage_df["position"] == "WR"].head(35)
+    top12_te = fantasyAverage_df[fantasyAverage_df["position"] == "TE"].head(15)
     
     # if necessary i can get full weekbyweek data (this would be better for calculating a composite score and factor in other factors)
     # top_rb_weekly = week_by_week_df[week_by_week_df['player_name'].isin(top_rb["player_name"])]
@@ -228,6 +228,10 @@ def calculate_top_player_matchup(schedule_df, week_by_week_df, start_week=1, end
     top12_te_matchups = top12_te.merge(matchups_df, left_on="recent_team", right_on="team", how="left")
     top10_qb_matchups = top10_qb.merge(matchups_df, left_on="recent_team", right_on="team", how="left")
     
+    top10_qb_matchups = top10_qb_matchups.rename(columns={"fantasy_points_ppr": "avg_fantasy_points_ppr"})
+    top30_rb_matchups = top30_rb_matchups.rename(columns={"fantasy_points_ppr": "avg_fantasy_points_ppr"})
+    top30_wr_matchups = top30_wr_matchups.rename(columns={"fantasy_points_ppr": "avg_fantasy_points_ppr"})
+    top12_te_matchups = top12_te_matchups.rename(columns={"fantasy_points_ppr": "avg_fantasy_points_ppr"})
     return top10_qb_matchups, top30_rb_matchups, top30_wr_matchups, top12_te_matchups
     
 def plot_fantasy_vs_matchup(data_df, position, playoffs= True, filepath = "fantasy_vs_matchup.png"):
@@ -235,7 +239,7 @@ def plot_fantasy_vs_matchup(data_df, position, playoffs= True, filepath = "fanta
 
     # create the scatter plot
     scatter = plt.scatter(
-        data_df["fantasy_points_ppr"],
+        data_df["avg_fantasy_points_ppr"],
         data_df[f"{position.lower()}_opponent_average"],
         alpha=0.7
     )
@@ -243,7 +247,7 @@ def plot_fantasy_vs_matchup(data_df, position, playoffs= True, filepath = "fanta
     # add text annotations for each player
     texts = [
         plt.text(
-            row["fantasy_points_ppr"],
+            row["avg_fantasy_points_ppr"],
             row[f"{position.lower()}_opponent_average"],
             row["player_name"],
             fontsize=9
@@ -255,15 +259,15 @@ def plot_fantasy_vs_matchup(data_df, position, playoffs= True, filepath = "fanta
     adjust_text(texts, arrowprops=dict(arrowstyle="->", color='black', lw=0.5))
 
      # calculate the plot limits
-    min_fantasy_points = data_df["fantasy_points_ppr"].min()
-    max_fantasy_points = data_df["fantasy_points_ppr"].max()
+    min_fantasy_points = data_df["avg_fantasy_points_ppr"].min()
+    max_fantasy_points = data_df["avg_fantasy_points_ppr"].max()
     min_opponent_rank = data_df[f"{position.lower()}_opponent_average"].min()
     max_opponent_rank = data_df[f"{position.lower()}_opponent_average"].max()
 
     # draw a diagonal line from top left (easiest matchups, low PPG) to bottom right (hardest matchups, high PPG)
     plt.plot(
-        [min_fantasy_points, max_fantasy_points],  # x-axis (fantasy points)
-        [max_opponent_rank, min_opponent_rank],    # y-axis (opponent rank)
+        [min_fantasy_points, max_fantasy_points],
+        [max_opponent_rank, min_opponent_rank],   
         color='purple',
         linestyle='--',
         label='Diagonal Split Line'
@@ -281,3 +285,179 @@ def plot_fantasy_vs_matchup(data_df, position, playoffs= True, filepath = "fanta
     plt.grid()
     plt.savefig(f"visuals/{filepath}")
     plt.show()
+    
+def zscore_and_weight(df, metric, weight):
+    z_score = (df[metric] - df[metric].mean()) / df[metric].std()
+    return z_score * weight
+
+def getOffensiveQuality(week_by_week_df):
+    # calculate each metric
+    week_by_week_df['total_yards'] = week_by_week_df['passing_yards'] + week_by_week_df['rushing_yards']
+    week_by_week_df['total_first_downs'] = week_by_week_df['passing_first_downs'] + week_by_week_df['rushing_first_downs']
+    week_by_week_df['total_touchdowns'] = week_by_week_df['rushing_tds'] + week_by_week_df['passing_tds']
+    
+    # aggregate season totals per team
+    offensive_quality = week_by_week_df.groupby(['recent_team']).agg(
+        total_yards=('total_yards', 'sum'),
+        total_first_downs=('total_first_downs', 'sum'),
+        total_touchdowns=('total_touchdowns', 'sum')
+    )
+    
+    # calculate z scores for each metric
+    offensive_quality['z_yards'] = (offensive_quality['total_yards'] - offensive_quality['total_yards'].mean()) / offensive_quality['total_yards'].std()
+    offensive_quality['z_first_downs'] = (offensive_quality['total_first_downs'] - offensive_quality['total_first_downs'].mean()) / offensive_quality['total_first_downs'].std()
+    offensive_quality['z_touchdowns'] = (offensive_quality['total_touchdowns'] - offensive_quality['total_touchdowns'].mean()) / offensive_quality['total_touchdowns'].std()
+    
+    # average z scores to get a composite offensive quality score
+    offensive_quality['offensive_quality_score'] = .275*offensive_quality['z_yards'] + .275*offensive_quality['z_first_downs'] +  .45* offensive_quality['z_touchdowns']
+    
+    return offensive_quality[['offensive_quality_score']]
+
+
+
+# creating a composite score, going to factor in : 
+# TE : target_share, air_yard_target_share, receiving_epa, fantasy_points_ppr, opponent_rank 
+# wr : wopr, receiving_epa, fantasy_points_ppr, opponent_rank
+# rb: carries,  targets, rushing_tds + receiving_tds, rushing_epa, fantasy_points_ppr, opponent_rank
+#also factor in PPG_DROP 
+#
+def compositeBuyLowRankings (weekByWeek_df, schedule_df): 
+    offensiveQuality_df = getOffensiveQuality(weekByWeek_df)
+    top10_qb, top35_rb, top35_wr, top12_te = calculate_top_player_matchup(schedule_df, weekByWeek_df, 15, 17) # obtaining the best matchups for playoff weeks
+    
+    top_rb_weekByWeek = weekByWeek_df[weekByWeek_df['player_name'].isin(top35_rb["player_name"])]
+    top_wr_weekByWeek = weekByWeek_df[weekByWeek_df['player_name'].isin(top35_wr["player_name"])]
+    top_te_weekByWeek = weekByWeek_df[weekByWeek_df['player_name'].isin(top12_te["player_name"])]
+    
+    top_rb_weekByWeek["total_touchdowns"] = top_rb_weekByWeek["rushing_tds"] + top_rb_weekByWeek["receiving_tds"]
+    
+    # obtaining all the metrics I want to use
+    topRBStats = top_rb_weekByWeek.groupby(['player_name']).agg(
+        carries=('carries', 'mean'),
+        targets=('targets', 'mean'),
+        total_tds=('total_touchdowns', 'mean'),
+        avg_rushing_epa=('rushing_epa', 'mean'), 
+        recent_team = ('recent_team', 'last'),
+    ).reset_index()
+    topWRStats = top_wr_weekByWeek.groupby(['player_name']).agg(
+        wopr=('wopr', 'mean'),
+        avg_receiving_epa=('receiving_epa', 'mean'),
+        recent_team = ('recent_team', 'last'),
+    ).reset_index()
+    topTEStats = top_te_weekByWeek.groupby(['player_name']).agg(
+        target_share=('target_share', 'mean'),
+        air_yard_target_share=('air_yards_share', 'mean'),
+        avg_receiving_epa=('receiving_epa', 'mean'),
+        recent_team = ('recent_team', 'last'),
+    ).reset_index()
+    
+    #merging all the datafarmes
+    topRBStats = topRBStats.merge(offensiveQuality_df, left_on='recent_team', right_on='recent_team', how='left')
+    topRBStatsWithMatchups = topRBStats.merge(top35_rb, left_on='player_name', right_on='player_name', how='left')
+    topWRStats = topWRStats.merge(offensiveQuality_df, left_on='recent_team', right_on='recent_team', how='left')
+    topWRStatsWithMatchups = topWRStats.merge(top35_wr, left_on='player_name', right_on='player_name', how='left')
+    topTEStats = topTEStats.merge(offensiveQuality_df, left_on='recent_team', right_on='recent_team', how='left')
+    topTEStatsWithMatchups = topTEStats.merge(top12_te, left_on='player_name', right_on='player_name', how='left')
+    
+    # calculate PPG Drop 
+    def calculate_ppg_drop(df, weekByWeek_df):
+        last_2_games = weekByWeek_df.groupby('player_name').tail(2)
+        last_2_games_avg = last_2_games.groupby('player_name')['fantasy_points_ppr'].mean()
+
+        season_avg = df.set_index('player_name')['avg_fantasy_points_ppr']
+
+        ppg_drop = season_avg.subtract(last_2_games_avg, fill_value=0)
+        df['ppg_drop'] = df['player_name'].map(ppg_drop).fillna(0)
+        return df
+
+    # add PPG Drop to each stats DataFrame
+    topRBStatsWithMatchups = calculate_ppg_drop(topRBStatsWithMatchups, top_rb_weekByWeek)
+    topWRStatsWithMatchups = calculate_ppg_drop(topWRStatsWithMatchups, top_wr_weekByWeek)
+    topTEStatsWithMatchups = calculate_ppg_drop(topTEStatsWithMatchups, top_te_weekByWeek)
+    
+    
+    #z standardizing everything!!
+    rbMetrics = ['carries', 'targets', 'total_tds', 'avg_rushing_epa', "offensive_quality_score", "rb_opponent_average", "avg_fantasy_points_ppr"]
+    for metric in rbMetrics: 
+        topRBStatsWithMatchups[f'z_{metric}'] = (topRBStatsWithMatchups[metric] - topRBStatsWithMatchups[metric].mean()) / topRBStatsWithMatchups[metric].std()
+    wrMetrics = ['wopr', 'avg_receiving_epa',"offensive_quality_score", "wr_opponent_average", 'avg_fantasy_points_ppr']
+    for metric in wrMetrics:
+        topWRStatsWithMatchups[f'z_{metric}'] = (topWRStatsWithMatchups[metric] - topWRStatsWithMatchups[metric].mean()) / topWRStatsWithMatchups[metric].std()
+    TEMetrics= ['target_share', 'air_yard_target_share', 'avg_receiving_epa', "offensive_quality_score", "te_opponent_average", 'avg_fantasy_points_ppr']
+    for metric in TEMetrics:
+        topTEStatsWithMatchups[f'z_{metric}'] = (topTEStatsWithMatchups[metric] - topTEStatsWithMatchups[metric].mean()) / topTEStatsWithMatchups[metric].std()
+    
+    #creating objects with the weights for each metric
+    rb_weights = {
+        'z_carries': 0.125,
+        'z_targets': 0.125,
+        'z_total_tds': 0.2,
+        'z_avg_rushing_epa': 0.05,
+        'z_offensive_quality_score': 0.2,
+        'z_avg_fantasy_points_ppr': 0.2,
+        'z_rb_opponent_average': 0.1
+    }
+    wr_weights = {
+        'z_wopr': 0.3,
+        'z_avg_receiving_epa': 0.2,
+        'z_offensive_quality_score': 0.2,
+        'z_avg_fantasy_points_ppr': 0.2,
+        'z_wr_opponent_average': 0.1
+    }
+    te_weights = {
+        'z_target_share': 0.2,
+        'z_air_yard_target_share': 0.2,
+        'z_avg_receiving_epa': 0.2,
+        'z_offensive_quality_score': 0.1,
+        'z_avg_fantasy_points_ppr': 0.2, 
+        'z_te_opponent_average': 0.1
+    }
+    
+    def calculate_composite_score(df, weights):
+        composite_score = 0
+        for metric, weight in weights.items():
+            composite_score += df[metric] * weight
+        return composite_score
+    
+    topRBStatsWithMatchups['composite_score'] = calculate_composite_score(topRBStatsWithMatchups, rb_weights)
+    topWRStatsWithMatchups['composite_score'] = calculate_composite_score(topWRStatsWithMatchups, wr_weights)
+    topTEStatsWithMatchups['composite_score'] = calculate_composite_score(topTEStatsWithMatchups, te_weights)
+    
+    topRBStatsWithMatchups['rank'] = topRBStatsWithMatchups['composite_score'].rank(ascending=False)
+    topWRStatsWithMatchups['rank'] = topWRStatsWithMatchups['composite_score'].rank(ascending=False)
+    topTEStatsWithMatchups['rank'] = topTEStatsWithMatchups['composite_score'].rank(ascending=False)
+    
+    
+    return topRBStatsWithMatchups[['player_name', 'composite_score', 'rank', 'ppg_drop']].sort_values(by='ppg_drop', ascending =False), topWRStatsWithMatchups[['player_name', 'composite_score', 'rank', 'ppg_drop']].sort_values(by='ppg_drop', ascending =False), topTEStatsWithMatchups[['player_name', 'composite_score', 'rank', 'ppg_drop']].sort_values(by='ppg_drop', ascending =False)
+
+def create_table_screenshot(df, file_path="table_screenshot.png", max_rows=15):
+    """
+    Creates a screenshot of a DataFrame as a table and saves it as an image.
+    """
+    # limit the number of rows for better readability
+    if len(df) > max_rows:
+        df = df.head(max_rows)
+
+    fig, ax = plt.subplots(figsize=(12, len(df) * 0.5))
+    ax.axis("tight")
+    ax.axis("off")
+
+    table = ax.table(
+        cellText=df.values,
+        colLabels=df.columns,
+        cellLoc="center",
+        loc="center"
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    table.auto_set_column_width(col=list(range(len(df.columns))))
+    for i, key in enumerate(df.columns):
+        table[0, i].set_facecolor("#40466e")
+        table[0, i].set_text_props(color="w", weight="bold")
+    for j in range(1, len(df) + 1):
+        if j % 2 == 0:
+            for i in range(len(df.columns)):
+                table[j, i].set_facecolor("#f0f0f0")
+
+    plt.savefig(file_path, bbox_inches="tight", dpi=300)
+    plt.close()
