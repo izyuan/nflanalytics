@@ -250,7 +250,7 @@ def plot_fantasy_vs_matchup(data_df, position, playoffs= True, filepath = "fanta
             row["avg_fantasy_points_ppr"],
             row[f"{position.lower()}_opponent_average"],
             row["player_name"],
-            fontsize=9
+            fontsize=10
         )
         for index, row in data_df.iterrows()
     ]
@@ -276,14 +276,15 @@ def plot_fantasy_vs_matchup(data_df, position, playoffs= True, filepath = "fanta
     plt.legend()
     
     # labels and title
-    plt.xlabel("Fantasy Points Per Game (Average)")
-    plt.ylabel("Average Opponent Matchup Rank (1 = Toughest Defense, Higher = Easier Defense)")
+    plt.xlabel("Average PPR Fantasy Points")
+    plt.ylabel("Playoff Average Opponent Matchup Rank (1 = Toughest Defense, 32 = Easiest Defense)")
     if playoffs:
         plt.title(f"Fantasy Points vs. Average Opponent Matchup Rank (Playoffs) for Top {position}s")
     else:
         plt.title(f"Fantasy Points vs. Average Opponent Matchup Rank (Rest of Season) for Top {position}s")
     plt.grid()
-    plt.savefig(f"visuals/{filepath}")
+    plt.tight_layout()
+    plt.savefig(f"visuals/{filepath}", dpi = 300)
     plt.show()
     
 def zscore_and_weight(df, metric, weight):
@@ -368,6 +369,7 @@ def compositeBuyLowRankings (weekByWeek_df, schedule_df):
 
         ppg_drop = season_avg.subtract(last_2_games_avg, fill_value=0)
         df['ppg_drop'] = df['player_name'].map(ppg_drop).fillna(0)
+        df['ppg_drop'] = df['ppg_drop'].apply(lambda x: round(x, 2))
         return df
 
     # add PPG Drop to each stats DataFrame
@@ -389,8 +391,8 @@ def compositeBuyLowRankings (weekByWeek_df, schedule_df):
     
     #creating objects with the weights for each metric
     rb_weights = {
-        'z_carries': 0.125,
-        'z_targets': 0.125,
+        'z_carries': 0.1,
+        'z_targets': 0.15,
         'z_total_tds': 0.2,
         'z_avg_rushing_epa': 0.05,
         'z_offensive_quality_score': 0.2,
@@ -417,6 +419,8 @@ def compositeBuyLowRankings (weekByWeek_df, schedule_df):
         composite_score = 0
         for metric, weight in weights.items():
             composite_score += df[metric] * weight
+            
+            composite_score = round(composite_score, 2)
         return composite_score
     
     topRBStatsWithMatchups['composite_score'] = calculate_composite_score(topRBStatsWithMatchups, rb_weights)
@@ -460,4 +464,5 @@ def create_table_screenshot(df, file_path="table_screenshot.png", max_rows=15):
                 table[j, i].set_facecolor("#f0f0f0")
 
     plt.savefig(file_path, bbox_inches="tight", dpi=300)
+    plt.tight_layout()
     plt.close()
